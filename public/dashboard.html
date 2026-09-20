@@ -106,6 +106,29 @@
       .progress-labels span.active { color: var(--warm-light); opacity: 1; font-weight: 600; }
       .progress-labels span.done { color: oklch(var(--su)); opacity: 0.9; }
       @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+      .account-state-btn {
+        display: inline-flex;
+        align-items: center;
+        max-width: 100%;
+        padding: 0.35rem 0.65rem;
+        border: 1px solid var(--warm-border);
+        border-radius: 0.375rem;
+        background: oklch(var(--b2) / 0.55);
+        text-align: left;
+        cursor: pointer;
+        transition: border-color 0.15s, background 0.15s;
+      }
+      .account-state-btn:hover { background: oklch(var(--b2) / 0.85); }
+      .account-state-btn.logged-in { border-color: oklch(var(--su) / 0.55); }
+      .account-state-btn.logged-in .account-line { color: oklch(var(--su)); }
+      .account-state-btn.logged-out { border-color: oklch(var(--er) / 0.55); }
+      .account-state-btn.logged-out .account-line { color: oklch(var(--er)); }
+      .account-state-btn .account-line { font-size: 0.72rem; line-height: 1; font-weight: 600; }
+      .account-state-btn:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+        pointer-events: none;
+      }
     </style>
   </head>
   <body class="min-h-screen bg-base-300">
@@ -127,49 +150,43 @@
       <!-- Stats -->
       <div class="grid grid-cols-2 lg:grid-cols-4 gap-4" id="stats"></div>
 
-      <!-- Main panels -->
-      <div class="grid lg:grid-cols-5 gap-6">
-
-        <!-- Generate -->
-        <div class="lg:col-span-2 card bg-base-100 shadow-sm">
-          <div class="card-body">
-            <h2 class="card-title text-base">Generate Cookie</h2>
-
-            <div class="form-control">
-              <label class="label"><span class="label-text">Account</span></label>
-              <select id="accountId" class="select select-bordered w-full"></select>
+      <!-- Advanced Release Notice -->
+      <div class="card bg-base-100 shadow-sm border border-warning/20">
+        <div class="card-body">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 class="card-title text-base">Advanced Release Notice</h2>
             </div>
+            <div id="monitorStatusBadge" class="badge badge-ghost">No active monitor</div>
+          </div>
 
-            <div id="accountInfo" class="text-sm text-warm mt-1"></div>
-
-            <div class="form-control mt-2">
-              <label class="label"><span class="label-text">Event URL</span></label>
-              <input id="eventUrl" type="url" required placeholder="https://www.ticketmaster.com/event/..." class="input input-bordered w-full input-sm" />
+          <div class="grid lg:grid-cols-5 gap-4 mt-2">
+            <div class="lg:col-span-3">
+              <div class="form-control">
+                <label class="label"><span class="label-text">Event URL</span></label>
+                <div class="flex gap-2 items-center">
+                  <input id="eventUrl" type="url" required placeholder="e.g. https://www.ticketmaster.com/.../event/..." class="input input-bordered input-sm flex-1 min-w-0" />
+                  <button id="monitorToggleBtn" type="button" data-mode="start" class="btn btn-warning btn-sm shrink-0">Start Monitor</button>
+                </div>
+              </div>
             </div>
-
-            <div class="form-control mt-2">
-              <label class="label"><span class="label-text">Workers</span></label>
-              <input id="workerCount" type="number" min="1" max="3" value="1" class="input input-bordered w-full input-sm" />
-              <label class="label"><span class="label-text-alt text-warm-muted">Run this many browsers in parallel</span></label>
-            </div>
-
-            <div class="card-actions mt-4">
-              <button id="generateBtn" class="btn btn-primary w-full">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
-                Generate
+            <div class="lg:col-span-2 flex flex-col items-end">
+              <label class="label py-0 mb-1 w-full justify-end"><span class="label-text text-xs">Account</span></label>
+              <input type="hidden" id="accountId" value="default" />
+              <button type="button" id="accountStateBtn" class="account-state-btn">
+                <span id="accountStateLabel" class="account-line">…</span>
               </button>
             </div>
           </div>
-        </div>
-
-        <!-- Worker -->
-        <div class="lg:col-span-3 card bg-base-100 shadow-sm">
-          <div class="card-body">
-            <div class="flex items-center justify-between">
-              <h2 class="card-title text-base">Worker</h2>
-              <span id="workerDetail" class="text-sm text-warm-muted">0 / 1 active</span>
+          <div id="monitorPanel" class="hidden w-full border-t border-base-300 pt-4 mt-4 space-y-3">
+            <div id="monitorFlow" class="text-sm text-warm-muted w-full"></div>
+          </div>
+          <div id="sessionPanel" class="hidden w-full border-t border-base-300 pt-4 mt-4">
+            <div class="flex items-center justify-between mb-2">
+              <h3 class="font-semibold text-sm">TMPT Session</h3>
+              <span id="sessionDetail" class="text-sm text-warm-muted"></span>
             </div>
-            <div id="flowSteps" class="space-y-3 mt-2 max-h-[420px] overflow-y-auto"></div>
+            <div id="flowSteps" class="space-y-3 max-h-[280px] overflow-y-auto w-full"></div>
           </div>
         </div>
       </div>
@@ -184,7 +201,7 @@
 
           <div id="resultEmpty" class="text-center py-8 text-warm">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 mx-auto mb-2 icon-warm" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
-            Select an account, paste an <strong class="text-warm-light">event link</strong>, then click Generate
+            TMPT cookies appear here automatically after a validated Advanced Release Notice
           </div>
 
           <div id="resultPanel" class="hidden space-y-4">
@@ -209,27 +226,22 @@
         </div>
       </div>
 
-      <!-- Recent jobs -->
-      <div class="card bg-base-100 shadow-sm">
-        <div class="card-body p-0">
-          <div class="px-6 pt-5 pb-3"><h2 class="font-semibold">Recent Jobs</h2></div>
-          <div class="overflow-x-auto">
-            <table class="table table-sm">
-              <thead>
-                <tr class="text-warm-muted">
-                  <th>Time</th>
-                  <th>Account</th>
-                  <th>Status</th>
-                  <th>Duration</th>
-                  <th>Quality</th>
-                </tr>
-              </thead>
-              <tbody id="jobs"></tbody>
-            </table>
-          </div>
+    </main>
+
+    <!-- Account cookies modal -->
+    <dialog id="accountModal" class="modal modal-open:z-[100]">
+      <div class="modal-box max-w-3xl z-[100]">
+        <h3 class="font-bold text-base">Logged-in cookies</h3>
+        <p class="text-xs text-warm-muted mt-1 mb-3">View, copy, or edit your Ticketmaster session cookies.</p>
+        <textarea id="accountCookiesEditor" class="textarea textarea-bordered font-mono text-xs w-full h-72 leading-relaxed" spellcheck="false"></textarea>
+        <div class="modal-action">
+          <button type="button" id="copyAccountCookiesBtn" class="btn btn-ghost btn-sm">Copy</button>
+          <button type="button" id="saveAccountCookiesBtn" class="btn btn-primary btn-sm">Save</button>
+          <button type="button" id="closeAccountModalBtn" class="btn btn-sm">Close</button>
         </div>
       </div>
-    </main>
+      <form method="dialog" class="modal-backdrop"><button type="submit">close</button></form>
+    </dialog>
 
     <!-- Toast -->
     <div id="toast" class="toast toast-end toast-top z-50 hidden">
@@ -240,10 +252,28 @@
       const $ = (id) => document.getElementById(id);
 
       async function api(path, options) {
-        const res = await fetch(path, options);
-        const data = await res.json();
+        let res;
+        try {
+          res = await fetch(path, options);
+        } catch (error) {
+          throw new Error(error instanceof Error ? error.message : "Network request failed");
+        }
+        let data = {};
+        try {
+          data = await res.json();
+        } catch {
+          if (!res.ok) throw new Error(res.statusText || "Request failed");
+        }
         if (!res.ok && !data.status && !data.accepted) throw new Error(data.error || res.statusText);
         return data;
+      }
+
+      function parseCookiesInput(raw) {
+        if (!raw) return [];
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed;
+        if (Array.isArray(parsed.cookies)) return parsed.cookies;
+        throw new Error("Paste a cookie JSON array or { \"cookies\": [...] }");
       }
 
       function toast(msg, type = "success") {
@@ -252,14 +282,6 @@
         $("toastMsg").textContent = msg;
         el.classList.remove("hidden");
         setTimeout(() => el.classList.add("hidden"), 2500);
-      }
-
-      function setLoading(loading) {
-        const btn = $("generateBtn");
-        btn.disabled = loading;
-        btn.innerHTML = loading
-          ? `<span class="loading loading-spinner loading-sm"></span> Generating…`
-          : `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg> Generate`;
       }
 
       function renderStats(stats) {
@@ -276,12 +298,70 @@
           </div>`
         ).join("");
 
-        renderWorker(stats.worker || {});
-        renderJobs(stats);
+        renderSession(stats.worker || {});
+        renderMonitorSummary(stats.monitor || {});
       }
 
-      let maxWorkers = 3;
       let pollTimer = null;
+      let monitorPollTimer = null;
+      let jobPollTimer = null;
+      let activeMonitorId = null;
+      let accountLoggedIn = false;
+
+      const MONITOR_ACTIVE_STATUSES = [
+        "starting", "waiting_for_drop", "monitoring", "waiting",
+        "release_detected", "validated", "generating_tmpt",
+      ];
+
+      function isMonitorActive(monitor) {
+        return monitor && MONITOR_ACTIVE_STATUSES.includes(monitor.status);
+      }
+
+      function updateStartButtonAccess() {
+        const btn = $("monitorToggleBtn");
+        if (btn.dataset.mode === "stop") {
+          btn.disabled = false;
+          updateAccountButtonAccess();
+          return;
+        }
+        btn.disabled = !accountLoggedIn;
+        btn.className = accountLoggedIn
+          ? "btn btn-warning btn-sm shrink-0"
+          : "btn btn-warning btn-sm shrink-0 btn-disabled opacity-50";
+        updateAccountButtonAccess();
+      }
+
+      function updateAccountButtonAccess() {
+        const btn = $("accountStateBtn");
+        const monitorRunning = $("monitorToggleBtn").dataset.mode === "stop";
+        const modalOpen = $("accountModal").open;
+        btn.disabled = monitorRunning || modalOpen;
+      }
+
+      function setMonitorToggle(running) {
+        const btn = $("monitorToggleBtn");
+        if (running) {
+          btn.textContent = "Stop";
+          btn.className = "btn btn-ghost btn-sm shrink-0";
+          btn.dataset.mode = "stop";
+          btn.disabled = false;
+        } else {
+          btn.textContent = "Start Monitor";
+          btn.dataset.mode = "start";
+          updateStartButtonAccess();
+          return;
+        }
+        updateAccountButtonAccess();
+      }
+
+      function syncMonitorButtons(monitor) {
+        if (monitor?.id && isMonitorActive(monitor)) activeMonitorId = monitor.id;
+        if (monitor && ["complete", "failed", "stopped"].includes(monitor.status) && monitor.id === activeMonitorId) {
+          activeMonitorId = null;
+        }
+        const active = Boolean(activeMonitorId) && (!monitor || isMonitorActive(monitor));
+        setMonitorToggle(active);
+      }
 
       function startPoll(ms = 1000) {
         if (pollTimer) clearInterval(pollTimer);
@@ -290,6 +370,23 @@
 
       function stopPoll() {
         if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+      }
+
+      function pollJobUntilDone(jobId) {
+        if (jobPollTimer) clearInterval(jobPollTimer);
+        startPoll(1000);
+        jobPollTimer = setInterval(async () => {
+          try {
+            const job = await api(`/api/v1/pubsub/output/${jobId}`);
+            if (job.status === "completed" || job.status === "failed") {
+              clearInterval(jobPollTimer);
+              jobPollTimer = null;
+              stopPoll();
+              showJobResult(job);
+              await refresh();
+            }
+          } catch {}
+        }, 1500);
       }
 
       const STEP_SHORT = ["Account", "Browser", "Navigate", "Kasada", "GEC", "TMPT", "Deliver"];
@@ -327,103 +424,54 @@
         `;
       }
 
-      function renderWorker(worker) {
+      function renderSession(worker) {
         const running = worker.status === "running";
         $("navStatus").innerHTML = running
           ? `<span class="w-2 h-2 rounded-full bg-warning inline-block animate-pulse"></span> Running`
           : `<span class="w-2 h-2 rounded-full bg-success inline-block"></span> Idle`;
         $("navStatus").className = `badge badge-outline gap-1 ${running ? "badge-warning" : "badge-success"}`;
-        $("workerDetail").textContent = `${worker.activeWorkers || 0} / ${worker.maxWorkers || 1} active`;
 
-        const workers = worker.workers || [];
-        if (!workers.length) {
-          $("flowSteps").innerHTML = `<p class="text-sm text-warm-muted">No workers running. Set worker count and click Generate.</p>`;
+        const session = (worker.workers || [])[0];
+        if (!session) {
+          $("sessionPanel").classList.add("hidden");
           return;
         }
 
-        $("flowSteps").innerHTML = workers.map((w) => {
-          const panelCls = w.status === "running" ? "running" : w.status === "failed" ? "failed" : "done";
-          const badge = w.status === "running" ? "badge-warning" : w.status === "failed" ? "badge-error" : "badge-success";
-          return `<div class="worker-panel ${panelCls}">
-            <div class="flex items-center justify-between mb-1">
-              <span class="font-medium text-sm text-warm-light">Worker #${w.workerIndex}</span>
-              <span class="badge badge-sm ${badge}">${w.status}</span>
-            </div>
-            ${renderStepLine(w.flowSteps)}
-          </div>`;
-        }).join("");
-      }
+        $("sessionPanel").classList.remove("hidden");
+        $("sessionDetail").textContent = session.status === "running" ? "Generating TMPT…" : session.status;
 
-      function renderJobs(stats) {
-        const rows = stats.recentJobs || [];
-        $("jobs").innerHTML = rows.length ? rows.map((job) => {
-          const badge = job.status === "completed" ? "badge-success" : job.status === "failed" ? "badge-error" : "badge-ghost";
-          const duration = job.result?.durationMs;
-          const quality = job.result?.quality?.normalizedScore;
-          return `<tr class="hover">
-            <td class="text-warm-muted">${(job.completedAt || job.createdAt || "").replace("T", " ").slice(0, 19)}</td>
-            <td>${job.accountId}</td>
-            <td><span class="badge badge-sm ${badge}">${job.status}</span></td>
-            <td>${duration ? (duration / 1000).toFixed(1) + "s" : "—"}</td>
-            <td>${quality ?? "—"}</td>
-          </tr>`;
-        }).join("") : `<tr><td colspan="5" class="text-center text-warm-muted py-6">No jobs yet</td></tr>`;
-      }
-
-      function formatBatchCookies(jobs) {
-        return (jobs || [])
-          .slice()
-          .sort((a, b) => (a.workerIndex || 0) - (b.workerIndex || 0))
-          .map((j) => {
-            const tmpt = j.result?.cookies?.tmpt;
-            if (tmpt) return `${j.workerIndex}: ${tmpt}`;
-            return `${j.workerIndex}: (failed${j.error ? " — " + j.error : ""})`;
-          })
-          .join("\n\n");
+        const panelCls = session.status === "running" ? "running" : session.status === "failed" ? "failed" : "done";
+        const badge = session.status === "running" ? "badge-warning" : session.status === "failed" ? "badge-error" : "badge-success";
+        $("flowSteps").innerHTML = `<div class="worker-panel ${panelCls}">
+          <div class="flex items-center justify-between mb-1">
+            <span class="font-medium text-sm text-warm-light">TMPT generation</span>
+            <span class="badge badge-sm ${badge}">${session.status}</span>
+          </div>
+          ${renderStepLine(session.flowSteps)}
+        </div>`;
       }
 
       function setTmptOutput(text) {
-        const lines = (text || "").split("\n\n").filter(Boolean);
         $("tmptValue").value = text || "";
-        $("tmptValue").rows = Math.max(3, Math.min(16, lines.length * 3));
+        $("tmptValue").rows = 3;
       }
 
-      function showBatchResult(batch) {
+      function showJobResult(job) {
         $("resultEmpty").classList.add("hidden");
         $("resultPanel").classList.remove("hidden");
 
-        $("resultStatus").innerHTML =
-          `<span class="badge badge-success badge-sm">${batch.completed} ok</span> ` +
-          (batch.failed ? `<span class="badge badge-error badge-sm">${batch.failed} failed</span>` : "");
-        $("resultDuration").textContent = `${batch.workerCount} workers`;
-        $("resultAccount").textContent = $("accountId").value;
-
-        setTmptOutput(formatBatchCookies(batch.jobs));
-        $("rawOutput").textContent = JSON.stringify(batch, null, 2);
-
-        const qualities = batch.jobs.filter((j) => j.result?.quality).map((j) => j.result.quality.normalizedScore);
-        const avgQ = qualities.length ? (qualities.reduce((a, b) => a + b, 0) / qualities.length).toFixed(2) : null;
-        $("qualityBadge").innerHTML = avgQ
-          ? `<span class="badge badge-success gap-1">Avg quality ${avgQ}</span>`
-          : "";
-      }
-
-      function showResult(result) {
-        $("resultEmpty").classList.add("hidden");
-        $("resultPanel").classList.remove("hidden");
-
-        const ok = result.success;
+        const result = job.result;
+        const ok = job.status === "completed" && result?.success;
         $("resultStatus").innerHTML = ok
           ? `<span class="badge badge-success badge-sm">Success</span>`
           : `<span class="badge badge-error badge-sm">Failed</span>`;
-        $("resultDuration").textContent = result.durationMs ? (result.durationMs / 1000).toFixed(1) + "s" : "—";
-        $("resultAccount").textContent = result.accountId || "—";
-        const tmpt = result.cookies?.tmpt || result.result?.cookies?.tmpt || "";
-        const workerIndex = result.workerIndex || 1;
-        setTmptOutput(tmpt ? `${workerIndex}: ${tmpt}` : "");
-        $("rawOutput").textContent = JSON.stringify(result, null, 2);
+        $("resultDuration").textContent = result?.durationMs ? (result.durationMs / 1000).toFixed(1) + "s" : "—";
+        $("resultAccount").textContent = job.accountId || $("accountId").value;
 
-        const q = result.quality || result.result?.quality;
+        setTmptOutput(result?.cookies?.tmpt || "");
+        $("rawOutput").textContent = JSON.stringify(job, null, 2);
+
+        const q = result?.quality;
         if (q) {
           const premium = q.normalizedScore >= 0.9;
           $("qualityBadge").innerHTML = premium
@@ -434,93 +482,198 @@
         }
       }
 
+      const MONITOR_STEP_SHORT = ["Start", "Baseline", "Watch", "Detected", "Validate", "Trigger", "Done"];
+
+      function renderMonitorFlow(monitor) {
+        syncMonitorButtons(monitor);
+
+        if (!monitor) {
+          $("monitorPanel").classList.add("hidden");
+          return;
+        }
+
+        $("monitorPanel").classList.remove("hidden");
+        const steps = monitor.flowSteps || [];
+        $("monitorFlow").innerHTML = `
+          <div class="flex flex-wrap gap-3 text-sm mb-2">
+            <span><span class="text-warm-muted">Status</span> <span class="badge badge-sm badge-outline">${monitor.status}</span></span>
+            <span><span class="text-warm-muted">Phase</span> ${monitor.phase}</span>
+            <span><span class="text-warm-muted">Polls</span> ${monitor.pollCount ?? 0}</span>
+          </div>
+          ${renderStepLineGeneric(steps, MONITOR_STEP_SHORT)}
+          ${monitor.error ? `<div class="text-xs text-error mt-2">${monitor.error}</div>` : ""}
+        `;
+
+      }
+
+      function renderStepLineGeneric(steps, labels) {
+        const list = steps || [];
+        const nodes = list.map((step) =>
+          `<span class="progress-node ${step.status}" title="${step.label}"></span>`
+        ).join("");
+        const labelRow = list.map((step, i) => {
+          const cls = step.status === "running" ? "active" : step.status === "done" ? "done" : "";
+          return `<span class="${cls}">${labels[i] || i + 1}</span>`;
+        }).join("");
+        return `<div class="progress-line"><div class="progress-fill" style="width:0"></div>${nodes}</div><div class="progress-labels">${labelRow}</div>`;
+      }
+
+      function renderMonitorSummary(monitorSnap) {
+        const active = monitorSnap.activeMonitors ?? 0;
+        $("monitorStatusBadge").textContent = active > 0 ? `${active} monitor active` : "No active monitor";
+        $("monitorStatusBadge").className = `badge ${active > 0 ? "badge-warning" : "badge-ghost"}`;
+        if (active > 0 && monitorSnap.monitors?.[0]) {
+          renderMonitorFlow(monitorSnap.monitors[0]);
+        }
+      }
+
+      function startMonitorPoll(monitorId) {
+        activeMonitorId = monitorId;
+        setMonitorToggle(true);
+        if (monitorPollTimer) clearInterval(monitorPollTimer);
+        monitorPollTimer = setInterval(async () => {
+          try {
+            const monitor = await api(`/api/v1/monitor/${monitorId}`);
+            renderMonitorFlow(monitor);
+            if (["complete", "failed", "stopped"].includes(monitor.status)) {
+              clearInterval(monitorPollTimer);
+              monitorPollTimer = null;
+              activeMonitorId = null;
+              setMonitorToggle(false);
+              if (monitor.tmptJobId && monitor.tmptTriggered) {
+                toast("Release validated — TMPT generation triggered");
+                const job = await api(`/api/v1/pubsub/output/${monitor.tmptJobId}`);
+                if (job.status === "completed" || job.status === "failed") showJobResult(job);
+                else pollJobUntilDone(monitor.tmptJobId);
+              }
+              await refresh();
+            }
+          } catch {}
+        }, 1500);
+      }
+
+      async function startMonitor() {
+        if (!accountLoggedIn) {
+          throw new Error("Logged-in cookies required. Click Account to add session cookies.");
+        }
+        const eventUrl = getEventUrl();
+
+        setMonitorToggle(true);
+        try {
+          const accepted = await api("/api/v1/monitor/start", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              accountId: $("accountId").value,
+              eventUrl,
+              autoGenerate: true,
+            }),
+          });
+          toast("Event monitor started");
+          $("monitorPanel").classList.remove("hidden");
+          activeMonitorId = accepted.monitor.id;
+          renderMonitorFlow(accepted.monitor);
+          startMonitorPoll(accepted.monitor.id);
+        } catch (error) {
+          activeMonitorId = null;
+          setMonitorToggle(false);
+          throw error;
+        }
+      }
+
+      async function stopMonitor() {
+        if (!activeMonitorId) {
+          toast("No active monitor", "warning");
+          setMonitorToggle(false);
+          return;
+        }
+        const monitor = await api(`/api/v1/monitor/stop/${activeMonitorId}`, { method: "POST" });
+        toast("Monitor stopped", "warning");
+        if (monitorPollTimer) clearInterval(monitorPollTimer);
+        monitorPollTimer = null;
+        activeMonitorId = null;
+        setMonitorToggle(false);
+        renderMonitorFlow(monitor.monitor ?? monitor);
+        await refresh();
+      }
+
       function getEventUrl() {
         const value = $("eventUrl").value.trim();
         if (!value) throw new Error("Event URL is required");
-        if (!/ticketmaster\.com\/event\//i.test(value)) {
-          throw new Error("URL must be a Ticketmaster event link (/event/...)");
+        if (!/ticketmaster\.com/i.test(value) || !/\/event\/[^/?#]+/i.test(value)) {
+          throw new Error("URL must be a Ticketmaster event link (must contain /event/...)");
         }
         return value;
-      }
-
-      async function loadConfig() {
-        try {
-          const health = await api("/api/v1/health");
-          if (health.defaultEventUrl && !$("eventUrl").value) {
-            $("eventUrl").value = health.defaultEventUrl;
-          }
-          if (health.maxWorkers) {
-            maxWorkers = health.maxWorkers;
-            $("workerCount").max = maxWorkers;
-          }
-        } catch {}
       }
 
       async function refresh() {
         try { renderStats(await api("/api/v1/stats")); } catch {}
       }
 
+      function renderAccountState(account) {
+        const btn = $("accountStateBtn");
+        accountLoggedIn = Boolean(account?.loggedIn);
+
+        if (!account) {
+          $("accountStateLabel").textContent = "Login";
+          btn.className = "account-state-btn logged-out";
+          updateStartButtonAccess();
+          return;
+        }
+
+        $("accountId").value = account.id;
+        $("accountStateLabel").textContent = account.loggedIn ? "Ready" : "Login";
+        btn.className = `account-state-btn ${account.loggedIn ? "logged-in" : "logged-out"}`;
+        updateStartButtonAccess();
+      }
+
       async function loadAccounts() {
         const data = await api("/api/v1/accounts");
-        $("accountId").innerHTML = data.accounts.map((a) =>
-          `<option value="${a.id}">${a.label}${a.loggedIn ? " · logged in" : ""}</option>`
-        ).join("");
-        const sel = data.accounts.find((a) => a.id === $("accountId").value) || data.accounts[0];
-        if (sel) {
-          $("accountInfo").textContent = sel.loggedIn
-            ? `${sel.cookieCount} cookies loaded · session ready`
-            : `${sel.cookieCount} cookies · not logged in`;
-        }
+        renderAccountState(data.accounts[0] ?? null);
       }
 
-      async function generate() {
-        const workerCount = Math.min(Math.max(1, parseInt($("workerCount").value, 10) || 1), maxWorkers);
-        $("workerCount").value = workerCount;
-
-        setLoading(true);
-        $("resultEmpty").classList.add("hidden");
-        $("resultPanel").classList.remove("hidden");
-        $("resultStatus").innerHTML = `<span class="badge badge-warning badge-sm">Running ${workerCount} worker(s)</span>`;
-        $("tmptValue").value = "";
-        $("tmptValue").rows = 3;
-        $("qualityBadge").innerHTML = "";
-
-        startPoll(1000);
+      async function openAccountModal() {
+        if ($("accountStateBtn").disabled) return;
+        $("accountStateBtn").disabled = true;
+        const accountId = $("accountId").value || "default";
         try {
-          const eventUrl = getEventUrl();
-          const accepted = await api("/api/v1/generate/batch", {
+          const account = await api(`/api/v1/accounts/${accountId}`);
+          $("accountCookiesEditor").value = JSON.stringify(account.cookies ?? [], null, 2);
+        } catch {
+          $("accountCookiesEditor").value = "[]";
+        }
+        $("accountModal").showModal();
+        updateAccountButtonAccess();
+      }
+
+      async function saveAccountCookies() {
+        const accountId = $("accountId").value || "default";
+        const btn = $("saveAccountCookiesBtn");
+        btn.disabled = true;
+        try {
+          const cookies = parseCookiesInput($("accountCookiesEditor").value.trim());
+          const saved = await api(`/api/v1/accounts/${accountId}`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              accountId: $("accountId").value,
-              requestId: "batch-" + Date.now(),
-              eventUrl,
-              workerCount,
-            }),
+            body: JSON.stringify({ cookies }),
           });
-
-          toast(`Started ${workerCount} worker(s)`);
-
-          while (true) {
-            await new Promise((r) => setTimeout(r, 1000));
-            const batch = await api(accepted.pollUrl);
-            renderWorker(batch.worker || {});
-            if (batch.done) {
-              showBatchResult(batch);
-              toast(`${batch.completed}/${batch.workerCount} succeeded`, batch.failed ? "warning" : "success");
-              break;
-            }
-          }
-        } catch (err) {
-          toast(err.message, "error");
+          renderAccountState(saved);
+          $("accountModal").close();
+          toast(saved.loggedIn ? "Cookies saved · Ready" : "Cookies saved · Login required");
+        } catch (error) {
+          toast(error instanceof Error ? error.message : "Invalid JSON", "error");
         } finally {
-          stopPoll();
-          setLoading(false);
-          await refresh();
+          btn.disabled = false;
         }
       }
 
-      $("generateBtn").onclick = generate;
+      $("monitorToggleBtn").onclick = () => {
+        const run =
+          $("monitorToggleBtn").dataset.mode === "stop"
+            ? stopMonitor()
+            : startMonitor();
+        run.catch((err) => toast(err.message, "error"));
+      };
 
       $("copyBtn").onclick = () => {
         const val = $("tmptValue").value;
@@ -528,9 +681,17 @@
         navigator.clipboard.writeText(val).then(() => toast("Copied to clipboard"));
       };
 
-      $("accountId").onchange = loadAccounts;
+      $("accountStateBtn").onclick = () => openAccountModal();
+      $("accountModal").addEventListener("close", updateAccountButtonAccess);
+      $("copyAccountCookiesBtn").onclick = () => {
+        const val = $("accountCookiesEditor").value;
+        if (!val) return toast("Nothing to copy", "warning");
+        navigator.clipboard.writeText(val).then(() => toast("Cookies copied"));
+      };
+      $("saveAccountCookiesBtn").onclick = () => saveAccountCookies();
+      $("closeAccountModalBtn").onclick = () => $("accountModal").close();
 
-      loadConfig().then(loadAccounts).then(refresh);
+      loadAccounts().then(refresh);
       setInterval(() => { if (!pollTimer) refresh(); }, 5000);
     </script>
   </body>

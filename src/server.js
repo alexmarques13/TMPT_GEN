@@ -7,11 +7,13 @@ import { config } from "./config.js";
 import { requireEventUrl } from "./event-url.js";
 import { generateTmptCookies } from "./generator/index.js";
 import { metrics } from "./metrics.js";
+import { EventMonitorService } from "./monitor/index.js";
 import { JobQueue } from "./queue.js";
 import { workerState } from "./worker.js";
 
 const accounts = new AccountStore();
 const queue = new JobQueue(accounts);
+const monitorService = new EventMonitorService(accounts, queue);
 
 function json(res, status, body) {
   res.writeHead(status, {
@@ -49,7 +51,7 @@ export function startServer() {
     if (method === "OPTIONS") {
       res.writeHead(204, {
         "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+        "Access-Control-Allow-Methods": "GET,POST,PUT,OPTIONS",
         "Access-Control-Allow-Headers": "Content-Type,X-API-Key",
       });
       res.end();
@@ -79,7 +81,6 @@ export function startServer() {
         ok: true,
         version: config.productVersion,
         engine: "playwright-chromium",
-        defaultEventUrl: config.defaultEventUrl,
         maxWorkers: config.maxWorkers,
         uptimeSeconds: metrics.snapshot(0, 0).uptimeSeconds,
       });
@@ -96,11 +97,111 @@ export function startServer() {
     }
 
     if (method === "GET" && url.pathname === "/api/v1/stats") {
-      json(res, 200, metrics.snapshot(counts.running, counts.queued));
+      json(res, 200, {
+        ...metrics.snapshot(counts.running, counts.queued),
+        monitor: monitorService.snapshot(),
+      });
       return;
     }
 
+    if (method === "GET" && url.pathname === "/api/v1/monitor/active") {
+      json(res, 200, monitorService.snapshot());
+      return;
+    }
+
+    if (method === "POST" && url.pathname === "/api/v1/monitor/start") {
+      try {
+        const body = JSON.parse(await readBody(req));
+        if (!body.accountId) {
+          json(res, 400, { error: "accountId is required" });
+          return;
+        }
+        const profile = accounts.require(body.accountId);
+        const hasId = profile.cookies.some((c) => c.name === "id-token");
+        const hasSid = profile.cookies.some((c) => c.name === "SID" || c.name === "SOTC");
+        if (!hasId || !hasSid) {
+          json(res, 400, { error: "Logged-in session cookies required. Add id-token and SID/SOTC via Account." });
+          return;
+        }
+        const monitor = monitorService.start(body);
+        json(res, 202, {
+          accepted: true,
+          monitor,
+          pollUrl: `/api/v1/monitor/${monitor.id}`,
+        });
+      } catch (error) {
+        json(res, 400, { error: error instanceof Error ? error.message : String(error) });
+      }
+      return;
+    }
+
+    if (method === "POST" && url.pathname.startsWith("/api/v1/monitor/stop/")) {
+      const monitorId = url.pathname.split("/").pop() || "";
+      const monitor = monitorService.stop(monitorId);
+      if (!monitor) {
+        json(res, 404, { error: "Monitor not found" });
+        return;
+      }
+      json(res, 200, { stopped: true, monitor });
+      return;
+    }
+
+    if (method === "GET" && url.pathname.startsWith("/api/v1/monitor/")) {
+      const monitorId = url.pathname.split("/").pop() || "";
+      const monitor = monitorService.get(monitorId);
+      if (!monitor) {
+        json(res, 404, { error: "Monitor not found" });
+        return;
+      }
+      json(res, 200, monitor);
+      return;
+    }
+
+    if (url.pathname.startsWith("/api/v1/accounts/")) {
+      const accountId = decodeURIComponent(url.pathname.split("/").pop() || "");
+
+      if (method === "GET") {
+        accounts.reload();
+        const profile = accounts.get(accountId);
+        if (!profile) {
+          json(res, 404, { error: "Account not found" });
+          return;
+        }
+        const hasId = profile.cookies.some((c) => c.name === "id-token");
+        const hasSid = profile.cookies.some((c) => c.name === "SID" || c.name === "SOTC");
+        json(res, 200, {
+          id: profile.id,
+          label: profile.label,
+          cookies: profile.cookies,
+          cookieCount: profile.cookies.length,
+          loggedIn: hasId && hasSid,
+          idTokenPresent: hasId,
+        });
+        return;
+      }
+
+      if (method === "PUT" || method === "POST") {
+        try {
+          const body = JSON.parse(await readBody(req));
+          const saved = accounts.save(accountId, body);
+          const hasId = saved.cookies.some((c) => c.name === "id-token");
+          const hasSid = saved.cookies.some((c) => c.name === "SID" || c.name === "SOTC");
+          json(res, 200, {
+            id: saved.id,
+            label: saved.label,
+            cookies: saved.cookies,
+            cookieCount: saved.cookies.length,
+            loggedIn: hasId && hasSid,
+          });
+        } catch (error) {
+          json(res, 400, { error: error instanceof Error ? error.message : String(error) });
+        }
+        return;
+      }
+    }
+
     if (method === "GET" && url.pathname === "/api/v1/accounts") {
+      accounts.reload();
       const list = accounts.list().map((account) => {
         const profile = accounts.get(account.id);
         const hasId = profile.cookies.some((c) => c.name === "id-token");
